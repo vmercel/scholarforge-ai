@@ -16,6 +16,25 @@ import {
   validatePasswordStrength,
   verifyPassword,
 } from "./_core/password";
+import { normalizePhone, validatePhone } from "./_core/phone";
+
+function toFriendlyAuthDbError(error: unknown): TRPCError | null {
+  const message = error instanceof Error ? error.message : String(error);
+
+  const looksLikeSchemaMismatch =
+    /unknown column/i.test(message) ||
+    /ER_BAD_FIELD_ERROR/i.test(message) ||
+    /ER_NO_SUCH_TABLE/i.test(message) ||
+    /doesn't exist/i.test(message);
+
+  if (!looksLikeSchemaMismatch) return null;
+
+  return new TRPCError({
+    code: "INTERNAL_SERVER_ERROR",
+    message:
+      "Database schema is out of date for authentication. Run `pnpm db:push` (or apply migrations `drizzle/0002_local_auth.sql` and `drizzle/0003_user_phone.sql`) and restart the server.",
+  });
+}
 
 // Admin-only procedure
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
@@ -39,6 +58,7 @@ export const appRouter = router({
         z.object({
           name: z.string().min(1).max(200),
           email: z.string().email(),
+          phone: z.string().min(1),
           password: z.string().min(1),
         })
       )
@@ -52,12 +72,24 @@ export const appRouter = router({
         }
 
         const email = normalizeEmail(input.email);
+        const phoneError = validatePhone(input.phone);
+        if (phoneError) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: phoneError });
+        }
+        const phone = normalizePhone(input.phone);
         const passwordError = validatePasswordStrength(input.password);
         if (passwordError) {
           throw new TRPCError({ code: "BAD_REQUEST", message: passwordError });
         }
 
-        const existing = await db.getUserByEmail(email);
+        let existing: Awaited<ReturnType<typeof db.getUserByEmail>>;
+        try {
+          existing = await db.getUserByEmail(email);
+        } catch (error) {
+          const friendly = toFriendlyAuthDbError(error);
+          if (friendly) throw friendly;
+          throw error;
+        }
         if (existing) {
           throw new TRPCError({
             code: "CONFLICT",
@@ -69,17 +101,31 @@ export const appRouter = router({
         const signedInAt = new Date();
         const pw = await hashPassword(input.password);
 
-        await db.upsertUser({
-          openId,
-          name: input.name.trim(),
-          email,
-          loginMethod: "local",
-          passwordHash: pw.hash,
-          passwordSalt: pw.salt,
-          lastSignedIn: signedInAt,
-        });
+        try {
+          await db.upsertUser({
+            openId,
+            name: input.name.trim(),
+            email,
+            phone,
+            loginMethod: "local",
+            passwordHash: pw.hash,
+            passwordSalt: pw.salt,
+            lastSignedIn: signedInAt,
+          });
+        } catch (error) {
+          const friendly = toFriendlyAuthDbError(error);
+          if (friendly) throw friendly;
+          throw error;
+        }
 
-        const user = await db.getUserByOpenId(openId);
+        let user: Awaited<ReturnType<typeof db.getUserByOpenId>>;
+        try {
+          user = await db.getUserByOpenId(openId);
+        } catch (error) {
+          const friendly = toFriendlyAuthDbError(error);
+          if (friendly) throw friendly;
+          throw error;
+        }
         if (!user) {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
@@ -116,7 +162,14 @@ export const appRouter = router({
         }
 
         const email = normalizeEmail(input.email);
-        const user = await db.getUserByEmail(email);
+        let user: Awaited<ReturnType<typeof db.getUserByEmail>>;
+        try {
+          user = await db.getUserByEmail(email);
+        } catch (error) {
+          const friendly = toFriendlyAuthDbError(error);
+          if (friendly) throw friendly;
+          throw error;
+        }
 
         const passwordHash = (user as any)?.passwordHash as string | null | undefined;
         const passwordSalt = (user as any)?.passwordSalt as string | null | undefined;

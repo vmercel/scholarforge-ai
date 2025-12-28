@@ -296,6 +296,7 @@ class SDKServer {
         openId: session.openId,
         name: session.name,
         email: null,
+        phone: null,
         loginMethod: "dev",
         passwordHash: null,
         passwordSalt: null,

@@ -22,6 +22,7 @@ export default function Signup() {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
 
   const signupMutation = trpc.auth.signup.useMutation({
@@ -38,6 +39,7 @@ export default function Signup() {
     await signupMutation.mutateAsync({
       name: name.trim(),
       email: email.trim(),
+      phone: phone.trim(),
       password,
     });
   };
@@ -73,6 +75,21 @@ export default function Signup() {
                 placeholder="you@example.com"
                 required
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone</Label>
+              <Input
+                id="phone"
+                inputMode="tel"
+                autoComplete="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+1 555 123 4567"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Use digits only, optionally starting with <code>+</code>.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>

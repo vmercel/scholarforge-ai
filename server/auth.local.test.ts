@@ -63,6 +63,7 @@ describe("auth local signup/login", () => {
     const result = await caller.auth.signup({
       name: "Test User",
       email: "test@example.com",
+      phone: "+1 555 123 4567",
       password: "Passw0rd1",
     });
 
@@ -112,4 +113,3 @@ describe("auth local signup/login", () => {
     expect(cookies[0]?.options).toMatchObject({ maxAge: ONE_YEAR_MS });
   });
 });
-
